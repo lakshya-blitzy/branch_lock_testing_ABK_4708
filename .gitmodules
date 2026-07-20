@@ -1,0 +1,3 @@
+[submodule "NestedChild"]
+	path = NestedChild
+	url = https://github.com/lakshya-blitzy/600K_Nested_ChildRepo.git
