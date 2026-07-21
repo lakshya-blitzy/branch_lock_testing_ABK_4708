@@ -27,6 +27,20 @@ app.get('/good-evening', (req, res) => {
 
 // Start listening on the same host/port as before and emit the unchanged
 // startup log line so runtime behavior and observability are preserved.
-app.listen(port, hostname, () => {
+//
+// Express 5's `app.listen` registers this callback as BOTH the server's
+// `'listening'` handler and its `'error'` handler (via `server.once('error', done)`
+// in `express/lib/application.js`). On a successful bind the callback is invoked
+// with no argument; on a failed bind - e.g. `EADDRINUSE` when the port is already
+// in use - it is invoked with the error. We therefore inspect that argument so a
+// bind failure fails loudly (logs the error to stderr and exits non-zero) instead
+// of printing a false "Server running" line and exiting 0. This restores the
+// fail-fast behavior of the original native-`http` server and keeps the startup
+// log honest for process supervisors and operators.
+app.listen(port, hostname, (err) => {
+  if (err) {
+    console.error(err);
+    process.exit(1);
+  }
   console.log(`Server running at http://${hostname}:${port}/`);
 });
