@@ -65,7 +65,7 @@ Start the server with Node.js directly:
 node server.js
 ```
 
-> Use `node server.js` — **not** `npm start`, and **not** `node index.js`. Although `package.json` declares `main: "index.js"`, there is no `index.js` file in the repository; the real entry point is `server.js`. `Source: package.json:L5` / `Source: server.js:L1-L15`
+> Use `node server.js` — the documented entry point. `npm start` **also works**: because `package.json` defines no `start` script, npm's built-in default runs `node server.js` and prints the same startup banner. `node index.js` will **not** work, however — although `package.json` declares `main: "index.js"`, there is no `index.js` file in the repository, so the real entry point is `server.js`. `Source: package.json:L5` / `Source: server.js:L1-L15`
 
 On startup the server prints exactly:
 
@@ -91,7 +91,7 @@ Hello, World!
 
 ## API Documentation
 
-The server exposes a single **catch-all** endpoint. Every HTTP method (GET, POST, PUT, DELETE, …) against every URL path returns an identical response. There is deliberately **no** routing, **no** status codes other than `200`, **no** query-string or request-body parsing, **no** authentication, and **no** TLS. `Source: server.js:L36-L50`
+The server exposes a single **catch-all** endpoint. Every HTTP method (GET, POST, PUT, PATCH, DELETE, OPTIONS, …) against every URL path invokes the same handler and returns status `200` with `Content-Type: text/plain`. There is deliberately **no** routing, **no** application status codes other than `200`, **no** query-string or request-body parsing, **no** authentication, and **no** TLS. Response-bearing methods also receive the 14-byte body `Hello, World!\n`; per HTTP semantics a `HEAD` request returns the same status and headers but no message body (see the note below the contract table). `Source: server.js:L36-L50`
 
 ### Response contract
 
@@ -101,10 +101,12 @@ The server exposes a single **catch-all** endpoint. Every HTTP method (GET, POST
 | Path             | Any (`/`, `/anything/else`, `/foo?bar=baz`, …) |
 | Status           | `200 OK`                                       |
 | `Content-Type`   | `text/plain`                                   |
-| `Content-Length` | `14`                                           |
-| Body             | `Hello, World!\n`                              |
+| `Content-Length` | `14` for response-bearing methods; omitted for `HEAD` |
+| Body             | `Hello, World!\n` (14 bytes) for response-bearing methods; empty for `HEAD` |
 
 `Source: server.js:L45-L49`
+
+> **`HEAD` requests.** Per HTTP semantics, a `HEAD` response carries the same status line and headers as the equivalent `GET` but transmits **no message body**. The request handler still runs identically — it calls `res.end('Hello, World!\n')` — but Node's `http` layer suppresses the body for `HEAD` and omits the `Content-Length` header. So a `HEAD` request returns `200` and `Content-Type: text/plain` with **no body and no `Content-Length`**, whereas the `Content-Length: 14` and 14-byte body above apply to response-bearing methods (GET, POST, PUT, PATCH, DELETE, OPTIONS, …). `Source: server.js:L45-L49`
 
 ### Example request/response
 
@@ -127,7 +129,7 @@ Content-Length: 14
 Hello, World!
 ```
 
-Only the **application response** is a stable contract: status `200`, `Content-Type: text/plain`, and the exact 14-byte body `Hello, World!\n`. Those application facts are returned for every method and path — for example `curl -i -X POST http://127.0.0.1:3000/anything/else` or `curl -i -X DELETE "http://127.0.0.1:3000/foo?bar=baz"` — while the transport/runtime headers shown above may differ. `Source: server.js:L36-L50`
+Only the **application response** is a stable contract: status `200`, `Content-Type: text/plain`, and — for response-bearing methods — the exact 14-byte body `Hello, World!\n`. Those application facts hold for every method and path — for example `curl -i -X POST http://127.0.0.1:3000/anything/else` or `curl -i -X DELETE "http://127.0.0.1:3000/foo?bar=baz"` — while the transport/runtime headers shown above may differ. The one protocol-level exception is `HEAD`: the handler runs identically, but HTTP requires the response to carry no body, so a `HEAD` request returns `200` / `Content-Type: text/plain` with no body (and Node omits `Content-Length`). `Source: server.js:L36-L50`
 
 ## Configuration
 
