@@ -10,19 +10,30 @@ const port = 3000;
 // Express application instance replaces the former `http.createServer(...)`.
 const app = express();
 
+// Security hardening: do not advertise the framework in responses. By default
+// Express sets `X-Powered-By: Express` on every response; `app.disable(...)`
+// removes that header from all responses (both success and error) without
+// altering any route behavior, status, body, or content type.
+app.disable('x-powered-by');
+
 // Root greeting endpoint - preserved for backward compatibility.
 // Responds 200 with `Content-Type: text/plain` and the exact original body
 // `Hello, World!\n` (including the trailing newline). `res.type('text/plain')`
 // is set before `res.send(...)` so Express does not default the response to
 // `text/html`, keeping byte-for-byte parity with the previous behavior.
+// `X-Content-Type-Options: nosniff` is set so the success response carries the
+// same MIME-sniffing protection Express already applies to its 404 response;
+// this only adds a header and does not change the status, body, or media type.
 app.get('/', (req, res) => {
-  res.type('text/plain').send('Hello, World!\n');
+  res.set('X-Content-Type-Options', 'nosniff').type('text/plain').send('Hello, World!\n');
 });
 
 // Additional greeting endpoint - returns the exact body `Good evening`
 // (no trailing newline) as plain text for consistency with the root route.
+// Carries the same `X-Content-Type-Options: nosniff` protection as the root
+// route; this only adds a header and does not change the status, body, or type.
 app.get('/good-evening', (req, res) => {
-  res.type('text/plain').send('Good evening');
+  res.set('X-Content-Type-Options', 'nosniff').type('text/plain').send('Good evening');
 });
 
 // Start listening on the same host/port as before and emit the unchanged
@@ -39,7 +50,15 @@ app.get('/good-evening', (req, res) => {
 // log honest for process supervisors and operators.
 app.listen(port, hostname, (err) => {
   if (err) {
-    console.error(err);
+    // Fail loudly on a bind error (e.g. `EADDRINUSE`) but keep the log concise:
+    // emit only safe, structured fields (error code plus the affected
+    // address:port) rather than the full Error object, so no internal Node
+    // stack frames are written to stderr. Exit non-zero so process supervisors
+    // and operators reliably detect the failed start.
+    const where = err.address != null && err.port != null
+      ? ` ${err.address}:${err.port}`
+      : '';
+    console.error(`Failed to start server: ${err.code || err.message}${where}`);
     process.exit(1);
   }
   console.log(`Server running at http://${hostname}:${port}/`);
