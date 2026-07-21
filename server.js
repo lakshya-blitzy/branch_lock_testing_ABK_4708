@@ -14,7 +14,6 @@
  * @author hxu
  * @license MIT
  */
-
 const http = require('http');
 
 /**
@@ -23,7 +22,6 @@ const http = require('http');
  * @constant {string}
  */
 const hostname = '127.0.0.1';
-
 /**
  * TCP port the server listens on.
  * @constant {number}
@@ -31,13 +29,13 @@ const hostname = '127.0.0.1';
 const port = 3000;
 
 /**
- * HTTP server instance created with a single request-handler callback.
+ * Request-handler callback invoked for every inbound HTTP request.
  *
- * The handler is invoked for every inbound request. The request contents
- * (method, URL, headers, body) are intentionally ignored; every request receives
- * the same fixed response: status `200`, header `Content-Type: text/plain`, and
- * body `Hello, World!\n` (note the trailing newline).
+ * The request contents (method, URL, headers, body) are intentionally ignored;
+ * every request receives the same fixed response: status `200`, header
+ * `Content-Type: text/plain`, and body `Hello, World!\n` (note the trailing newline).
  *
+ * @callback requestHandler
  * @param {http.IncomingMessage} req - Inbound request object (contents ignored).
  * @param {http.ServerResponse} res - Response object used to reply to the client.
  * @returns {void}
@@ -49,12 +47,11 @@ const server = http.createServer((req, res) => {
 });
 
 /**
- * Begins listening for connections on the configured `port` and `hostname`.
+ * Startup callback invoked once the server is bound and ready to accept
+ * connections. Its sole side effect is logging the base URL to standard output
+ * (`Server running at http://127.0.0.1:3000/`).
  *
- * The provided startup callback runs once the server is bound and ready to accept
- * connections; its sole side effect is logging the base URL to standard output
- * (`Server running at http://127.0.0.1:3000/`). It returns no value.
- *
+ * @callback startupCallback
  * @returns {void}
  */
 server.listen(port, hostname, () => {
