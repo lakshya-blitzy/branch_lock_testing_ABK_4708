@@ -64,20 +64,14 @@ describe('server.js HTTP response contract (F-002 handler)', () => {
       const res = await request(server).get('/');
       expect(res.statusCode).toBe(200);
       expect(res.headers['content-type']).toMatch(/text\/plain/);
-      expect(res.text).toBe(EXPECTED_BODY);
-    });
-  });
-
-  describe('response headers (no anomalous headers beyond Node defaults)', () => {
-    test('GET / returns exactly the Node default header set plus Content-Type', async () => {
-      const res = await request(server).get('/');
-      expect(res.statusCode).toBe(200);
-      // Objective assertion over the normalized (lowercased) header names:
-      // exactly the Node 22 defaults plus the handler's Content-Type, and
-      // nothing anomalous. Fails if any extra/sensitive header is added.
+      // No anomalous headers beyond the Node 22 defaults plus the handler's
+      // Content-Type. Asserting the exact normalized (lowercased) header-name
+      // set here fails the suite if any arbitrary or sensitive header (e.g.
+      // Set-Cookie, X-Powered-By) is ever introduced, satisfying the "no
+      // anomalous headers beyond Node defaults" contract. The dynamic Date
+      // *value* is intentionally not asserted — only the presence of `date`.
       expect(Object.keys(res.headers).sort()).toEqual(DEFAULT_HEADER_NAMES);
-      // Retain the media-type assertion; the dynamic Date value is not asserted.
-      expect(res.headers['content-type']).toMatch(/text\/plain/);
+      expect(res.text).toBe(EXPECTED_BODY);
     });
   });
 
