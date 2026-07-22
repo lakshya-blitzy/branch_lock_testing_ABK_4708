@@ -29,17 +29,30 @@ const server = http.createServer((req, res) => {
     // Root Cause 3: reject overlong request targets (414 URI Too Long)
     if (req.url && req.url.length > MAX_URL_LENGTH) {
       res.statusCode = 414; res.setHeader('Content-Type', 'text/plain');
+      // Issue #1 (RC5): the request body is never consumed on this early return, so
+      // close the connection. On a keep-alive socket an undrained/declared body would
+      // otherwise cause the client's next request to be mis-read as this request's
+      // body (request-boundary desync / half-open connection until keepAliveTimeout).
+      res.setHeader('Connection', 'close');
       res.end('URI Too Long\n'); return;
     }
     // Root Cause 3: enforce an HTTP method allow-list (405 Method Not Allowed)
     if (!ALLOWED_METHODS.includes(req.method)) {
       res.statusCode = 405; res.setHeader('Allow', ALLOWED_METHODS.join(', '));
-      res.setHeader('Content-Type', 'text/plain'); res.end('Method Not Allowed\n'); return;
+      res.setHeader('Content-Type', 'text/plain');
+      // Issue #1 (RC5): close on rejection so an undrained declared body cannot desync
+      // a keep-alive connection (client's follow-up request swallowed / half-open).
+      res.setHeader('Connection', 'close');
+      res.end('Method Not Allowed\n'); return;
     }
     // Root Cause 3/5: reject oversized bodies by declared Content-Length (413)
     const declared = Number(req.headers['content-length']);
     if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) {
       res.statusCode = 413; res.setHeader('Content-Type', 'text/plain');
+      // Issue #1 (RC5): the oversized declared body is never read on this early return,
+      // so close the connection to prevent the client's next keep-alive request from
+      // being consumed as this request's body (boundary desync / half-open connection).
+      res.setHeader('Connection', 'close');
       res.end('Payload Too Large\n'); return;
     }
     // Root Cause 5: also enforce the body cap while streaming (chunked requests)
