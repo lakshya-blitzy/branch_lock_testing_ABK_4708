@@ -1,8 +1,8 @@
 # hello_world
 
-A minimal, zero-dependency HTTP server built on the Node.js core `http` module. `Source: server.js:L17` / `Source: package-lock.json:L1-L13`
+A minimal, zero-dependency HTTP server built on the Node.js core `http` module. `Source: server.js:L34` / `Source: package-lock.json:L1-L13`
 
-Every request — regardless of HTTP method or URL path — receives the same plain-text `Hello, World!` response. The project is intended as a learning/demonstration server, not a production service. `Source: server.js:L36-L50`
+Every request that reaches the server's request handler — regardless of URL path, query string, or body — receives the same plain-text `Hello, World!` response. A few protocol-level cases are handled by Node's `http` layer before (or instead of) the handler; see [API Documentation](#api-documentation). The project is intended as a learning/demonstration server, not a production service. `Source: server.js:L53-L72`
 
 ## Table of Contents
 
@@ -12,6 +12,7 @@ Every request — regardless of HTTP method or URL path — receives the same pl
 - [Running the Server](#running-the-server)
 - [API Documentation](#api-documentation)
   - [Response contract](#response-contract)
+  - [Protocol-level behavior](#protocol-level-behavior)
   - [Example request/response](#example-requestresponse)
 - [Configuration](#configuration)
 - [Code Walkthrough](#code-walkthrough)
@@ -29,14 +30,14 @@ Every request — regardless of HTTP method or URL path — receives the same pl
 
 ## Overview
 
-`hello_world` is a single-file HTTP server that listens on the loopback interface and answers every inbound request with the fixed plain-text body `Hello, World!\n`. It is built exclusively on the Node.js core `http` module — there are no web frameworks, no routers, and no third-party dependencies. Because it contains no routing logic, it behaves as a **catch-all**: the request method and URL are ignored, so every request yields an identical response. It is intended as a learning/demonstration server rather than a production service. `Source: server.js:L1-L15` / `Source: package-lock.json:L1-L13`
+`hello_world` is a single-file HTTP server that listens on the loopback interface and answers requests with the fixed plain-text body `Hello, World!\n`. It is built exclusively on the Node.js core `http` module — there are no web frameworks, no routers, and no third-party dependencies. Because it contains no routing logic, it behaves as a **catch-all** for every request that reaches its request handler: the method, URL, query string, and body are ignored, so those requests all yield an identical response. A few protocol-level cases — `HEAD`, `CONNECT`, parser-rejected requests, and HTTP-version framing — are handled by Node's `http` layer rather than by the handler (see [API Documentation](#api-documentation)). It is intended as a learning/demonstration server rather than a production service. `Source: server.js:L1-L32` / `Source: package-lock.json:L1-L13`
 
 ## Prerequisites
 
 - **Node.js 18+** — the documentation baseline for running this server.
 - **npm** — ships with Node.js; only needed for the optional install step below.
 
-> **Verified environment.** The server was verified against the AAP on Node.js **v22.23.1**, which is the only version with recorded empirical runtime evidence. `Source: server.js:L12` The **Node.js 18+** figure is the documentation baseline, not a tested compatibility guarantee for any particular release.
+> **Verified environment.** The server was verified against the AAP on Node.js **v22.23.1**, which is the only version with recorded empirical runtime evidence. `Source: server.js:L29` The **Node.js 18+** figure is the documentation baseline, not a tested compatibility guarantee for any particular release.
 >
 > **No version pin.** The repository does **not** pin a Node.js version: `package.json` declares no `engines` field, and no `.nvmrc` file exists in the repository (repository-inventory observation). `Source: package.json:L1-L11`
 
@@ -65,7 +66,7 @@ Start the server with Node.js directly:
 node server.js
 ```
 
-> Use `node server.js` — the documented entry point. `npm start` **also works**: because `package.json` defines no `start` script, npm's built-in default runs `node server.js` and prints the same startup banner. `node index.js` will **not** work, however — although `package.json` declares `main: "index.js"`, there is no `index.js` file in the repository, so the real entry point is `server.js`. `Source: package.json:L5` / `Source: server.js:L1-L15`
+> Use `node server.js` — the documented entry point. `npm start` **also works**: because `package.json` defines no `start` script, npm's built-in default runs `node server.js` and prints the same startup banner. `node index.js` will **not** work, however — although `package.json` declares `main: "index.js"`, there is no `index.js` file in the repository, so the real entry point is `server.js`. `Source: package.json:L5` / `Source: server.js:L1-L32`
 
 On startup the server prints exactly:
 
@@ -73,7 +74,7 @@ On startup the server prints exactly:
 Server running at http://127.0.0.1:3000/
 ```
 
-`Source: server.js:L52-L63`
+`Source: server.js:L74-L87`
 
 Verify it is responding (from a second terminal):
 
@@ -87,26 +88,42 @@ Expected output (note the trailing newline):
 Hello, World!
 ```
 
-`Source: server.js:L45-L49`
+`Source: server.js:L67-L71`
 
 ## API Documentation
 
-The server exposes a single **catch-all** endpoint. Every HTTP method (GET, POST, PUT, PATCH, DELETE, OPTIONS, …) against every URL path invokes the same handler and returns status `200` with `Content-Type: text/plain`. There is deliberately **no** routing, **no** application status codes other than `200`, **no** query-string or request-body parsing, **no** authentication, and **no** TLS. Response-bearing methods also receive the 14-byte body `Hello, World!\n`; per HTTP semantics a `HEAD` request returns the same status and headers but no message body (see the note below the contract table). `Source: server.js:L36-L50`
+The server exposes a single **catch-all** request handler. Every well-formed request that uses a recognized HTTP method (GET, POST, PUT, PATCH, DELETE, OPTIONS, …) other than `CONNECT` reaches Node's `request` event and invokes that handler, which returns status `200` with `Content-Type: text/plain` regardless of URL path, query string, headers, or body. There is deliberately **no** routing, **no** application status codes other than `200`, **no** query-string or request-body parsing, **no** authentication, and **no** TLS. Response-bearing methods also receive the 14-byte body `Hello, World!\n`.
+
+Some requests are handled by Node's `http` layer *before* (or *instead of*) the handler and therefore do not follow the `200`/`text/plain` contract — see [Protocol-level behavior](#protocol-level-behavior). `Source: server.js:L53-L72`
 
 ### Response contract
 
+This contract describes requests that reach the handler (the common case). For `HEAD`, `CONNECT`, and parser-level exceptions, see [Protocol-level behavior](#protocol-level-behavior).
+
 | Property         | Value                                          |
 | ---------------- | ---------------------------------------------- |
-| Method           | Any (GET, POST, PUT, DELETE, …)                |
+| Method           | Any recognized method that reaches the handler (GET, POST, PUT, PATCH, DELETE, OPTIONS, …; `HEAD`/`CONNECT` differ — see notes) |
 | Path             | Any (`/`, `/anything/else`, `/foo?bar=baz`, …) |
-| Status           | `200 OK`                                       |
+| Status           | `200 OK` from the handler (Node's parser may return `400`/`431` for rejected requests — see notes) |
 | `Content-Type`   | `text/plain`                                   |
-| `Content-Length` | `14` for response-bearing methods; omitted for `HEAD` |
+| `Content-Length` | `14` for response-bearing methods over HTTP/1.1; omitted for `HEAD` and for HTTP/1.0 close-framed responses |
 | Body             | `Hello, World!\n` (14 bytes) for response-bearing methods; empty for `HEAD` |
 
-`Source: server.js:L45-L49`
+`Source: server.js:L67-L71`
 
-> **`HEAD` requests.** Per HTTP semantics, a `HEAD` response carries the same status line and headers as the equivalent `GET` but transmits **no message body**. The request handler still runs identically — it calls `res.end('Hello, World!\n')` — but Node's `http` layer suppresses the body for `HEAD` and omits the `Content-Length` header. So a `HEAD` request returns `200` and `Content-Type: text/plain` with **no body and no `Content-Length`**, whereas the `Content-Length: 14` and 14-byte body above apply to response-bearing methods (GET, POST, PUT, PATCH, DELETE, OPTIONS, …). `Source: server.js:L45-L49`
+### Protocol-level behavior
+
+The request handler is registered on Node's `request` event, so it only runs for requests Node delivers there. The cases below are handled by the Node.js core `http` layer itself — this is standard Node behavior, not application logic, and the server code is unchanged. Each was verified live against a running server.
+
+| Case | Observed result | Why |
+| ---- | --------------- | --- |
+| `HEAD` request | `200` and `Content-Type: text/plain`, but **no body and no `Content-Length`** | The handler runs and calls `res.end('Hello, World!\n')`, yet HTTP requires a `HEAD` response to carry no message body, so Node suppresses the body and omits `Content-Length`. |
+| `CONNECT` request | Connection closed with **no response bytes** | `CONNECT` is dispatched to the server's `connect` event; there is no `connect` listener, so the socket is closed and the request never reaches the handler. |
+| Unknown or malformed method token (e.g. `BREW`, `G?T`) | `400 Bad Request` with an empty body | Node's HTTP parser rejects the request before the handler runs. |
+| Oversized request headers (beyond Node's default `maxHeaderSize`, ~16 KB) | `431 Request Header Fields Too Large` with an empty body | Parser-level limit enforced before the handler. |
+| HTTP/1.0 request | `200` and the 14-byte body, but **no `Content-Length`** (`Connection: close`) | HTTP/1.0 uses close framing instead of a `Content-Length` header. |
+
+`Source: server.js:L1-L32` / `Source: server.js:L53-L72`
 
 ### Example request/response
 
@@ -129,7 +146,7 @@ Content-Length: 14
 Hello, World!
 ```
 
-Only the **application response** is a stable contract: status `200`, `Content-Type: text/plain`, and — for response-bearing methods — the exact 14-byte body `Hello, World!\n`. Those application facts hold for every method and path — for example `curl -i -X POST http://127.0.0.1:3000/anything/else` or `curl -i -X DELETE "http://127.0.0.1:3000/foo?bar=baz"` — while the transport/runtime headers shown above may differ. The one protocol-level exception is `HEAD`: the handler runs identically, but HTTP requires the response to carry no body, so a `HEAD` request returns `200` / `Content-Type: text/plain` with no body (and Node omits `Content-Length`). `Source: server.js:L36-L50`
+The stable **application contract** is: status `200`, `Content-Type: text/plain`, and — for response-bearing methods that reach the handler — the exact 14-byte body `Hello, World!\n`. Those application facts hold for every well-formed request that reaches the handler — for example `curl -i -X POST http://127.0.0.1:3000/anything/else` or `curl -i -X DELETE "http://127.0.0.1:3000/foo?bar=baz"` — while the transport/runtime headers shown above may differ. Protocol-level cases handled by Node's `http` layer rather than the handler — `HEAD`, `CONNECT`, parser-rejected requests, and HTTP-version framing — are described under [Protocol-level behavior](#protocol-level-behavior). `Source: server.js:L53-L72`
 
 ## Configuration
 
@@ -137,19 +154,19 @@ All configuration is hard-coded as module constants in `server.js`. There are **
 
 | Constant   | Value       | Location        | Purpose                                       |
 | ---------- | ----------- | --------------- | --------------------------------------------- |
-| `hostname` | `127.0.0.1` | `server.js:L24` | Interface the server binds to (loopback only) |
-| `port`     | `3000`      | `server.js:L30` | TCP port the server listens on                |
+| `hostname` | `127.0.0.1` | `server.js:L41` | Interface the server binds to (loopback only) |
+| `port`     | `3000`      | `server.js:L47` | TCP port the server listens on                |
 
-`Source: server.js:L24-L30`
+`Source: server.js:L41-L47`
 
 ## Code Walkthrough
 
 `server.js` reads top-to-bottom as described below. These inline explanations mirror the JSDoc/inline comments in the source.
 
-- **Import the HTTP module** — `const http = require('http')` loads the Node.js core `http` module; no third-party packages are used. `Source: server.js:L17`
-- **Declare configuration constants** — `hostname = '127.0.0.1'` and `port = 3000` fix the bind address and listening port. `Source: server.js:L24-L30`
-- **Create the server / request handler** — `http.createServer((req, res) => { … })` registers the catch-all request handler. Inside it: `res.statusCode = 200` sets the status, `res.setHeader('Content-Type', 'text/plain')` sets the content type, and `res.end('Hello, World!\n')` writes the 14-byte body and ends the response. The `req` argument is never inspected, which is why the server responds identically to every request. `Source: server.js:L36-L50`
-- **Start listening** — `server.listen(port, hostname, () => { … })` binds the server; once it is listening, the ready callback logs `Server running at http://127.0.0.1:3000/`. `Source: server.js:L52-L63`
+- **Import the HTTP module** — `const http = require('http')` loads the Node.js core `http` module; no third-party packages are used. `Source: server.js:L34`
+- **Declare configuration constants** — `hostname = '127.0.0.1'` and `port = 3000` fix the bind address and listening port. `Source: server.js:L41-L47`
+- **Create the server / request handler** — `http.createServer((req, res) => { … })` registers the catch-all request handler. Inside it: `res.statusCode = 200` sets the status, `res.setHeader('Content-Type', 'text/plain')` sets the content type, and `res.end('Hello, World!\n')` writes the 14-byte body and ends the response. The `req` argument is never inspected, which is why the server responds identically to every request it handles. `Source: server.js:L53-L72`
+- **Start listening** — `server.listen(port, hostname, () => { … })` binds the server; once it is listening, the ready callback logs `Server running at http://127.0.0.1:3000/`. `Source: server.js:L74-L87`
 
 ### Request lifecycle
 
@@ -157,12 +174,14 @@ The following diagram traces a single request from the client through the handle
 
 ```mermaid
 flowchart LR
-    A[Client] -->|"Any method, any path"| B["http.createServer handler (server.js:L36-L50)"]
+    A[Client] -->|"Well-formed request, recognized method"| B["http.createServer handler (server.js:L53-L72)"]
     B --> C["res.statusCode = 200"]
     C --> D["Content-Type: text/plain"]
     D --> E["res.end('Hello, World!\n')"]
     E --> F[Client receives 200 response]
 ```
+
+> The diagram shows the common path: a well-formed request with a recognized method reaching the `request` handler. `HEAD`, `CONNECT`, parser-rejected requests (`400`/`431`), and HTTP-version framing are handled by Node's `http` layer — see [Protocol-level behavior](#protocol-level-behavior).
 
 ### Startup sequence
 
@@ -178,7 +197,7 @@ sequenceDiagram
     Node->>Console: console.log("Server running at http://127.0.0.1:3000/")
 ```
 
-`Source: server.js:L52-L63`
+`Source: server.js:L74-L87`
 
 ## Deployment
 
@@ -186,13 +205,13 @@ This is a dependency-free, single-file server. The guidance below reflects only 
 
 ### Bind address (loopback)
 
-By default the server binds to `127.0.0.1`, so it is reachable **only from the local machine**. To accept external/network traffic you must change the `hostname` constant in the source — for example to `0.0.0.0` to listen on all interfaces — and restart the server. `Source: server.js:L24`
+By default the server binds to `127.0.0.1`, so it is reachable **only from the local machine**. To accept external/network traffic you must change the `hostname` constant in the source — for example to `0.0.0.0` to listen on all interfaces — and restart the server. `Source: server.js:L41`
 
 > ⚠️ **Security warning.** Binding to `0.0.0.0` exposes the server on every network interface. This application has **no authentication, no authorization, and no TLS** — it answers every request with the same plaintext body. Before binding beyond `127.0.0.1`, restrict ingress with a firewall or private networking, and place a properly configured reverse proxy that terminates TLS and adds an authentication/access-control layer in front of it (see [Reverse proxy / TLS](#reverse-proxy--tls)).
 
 ### Port
 
-The server listens on the fixed port `3000`. To serve on a different port, edit the `port` constant in the source and restart. `Source: server.js:L30`
+The server listens on the fixed port `3000`. To serve on a different port, edit the `port` constant in the source and restart. `Source: server.js:L47`
 
 ### Process management
 
@@ -210,19 +229,19 @@ EXPOSE 3000
 CMD ["node", "server.js"]
 ```
 
-> Because the server binds to `127.0.0.1` by default, inside a container it will only accept connections originating **within** that container. To reach it from outside the container, change `hostname` to `0.0.0.0` in the source (see [Bind address](#bind-address-loopback)) before building the image. `Source: server.js:L24`
+> Because the server binds to `127.0.0.1` by default, inside a container it will only accept connections originating **within** that container. To reach it from outside the container, change `hostname` to `0.0.0.0` in the source (see [Bind address](#bind-address-loopback)) before building the image. `Source: server.js:L41`
 >
 > ⚠️ **Security warning.** Publishing this container with a `0.0.0.0` bind exposes an **unauthenticated, plaintext** service (no authentication, no authorization, no TLS). Keep it on a private network, restrict ingress with firewall rules or a container-network policy, and front it with a reverse proxy that terminates TLS and enforces authentication/access control before any public exposure.
 
 ### Reverse proxy / TLS
 
-The server speaks plain HTTP only — it has **no TLS support** and **no authentication or authorization**. For any public deployment, terminate TLS at a reverse proxy (for example nginx, Caddy, or a cloud load balancer) and forward the decrypted traffic to the server's host and port. In addition, keep the origin on a private network (or bound to `127.0.0.1` behind the proxy), restrict ingress with firewall rules, and enforce authentication/access control at the proxy layer — the application performs none of these checks itself. `Source: server.js:L24-L30`
+The server speaks plain HTTP only — it has **no TLS support** and **no authentication or authorization**. For any public deployment, terminate TLS at a reverse proxy (for example nginx, Caddy, or a cloud load balancer) and forward the decrypted traffic to the server's host and port. In addition, keep the origin on a private network (or bound to `127.0.0.1` behind the proxy), restrict ingress with firewall rules, and enforce authentication/access control at the proxy layer — the application performs none of these checks itself. `Source: server.js:L4-L14` / `Source: server.js:L67-L71`
 
 ## Troubleshooting
 
 | Symptom                                               | Cause                                                                                                                                                                            | Resolution                                                                                               |
 | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `Error: listen EADDRINUSE ... :3000` on startup       | Another process is already using port `3000`.                                                                                                                                    | Stop the other process, or change the `port` constant in the source and restart. `Source: server.js:L30` |
+| `Error: listen EADDRINUSE ... :3000` on startup       | Another process is already using port `3000`.                                                                                                                                    | Stop the other process, or change the `port` constant in the source and restart. `Source: server.js:L47` |
 | `npm test` exits with an error                        | The `test` script is a placeholder — `echo "Error: no test specified" && exit 1` — that fails by design and exits non-zero. No Node.js/npm tests are configured for this server. | Expected behavior; no action needed. `Source: package.json:L7`                                           |
 | `node index.js` → `Cannot find module '.../index.js'` | `package.json` declares `main: "index.js"`, but no `index.js` file exists.                                                                                                       | Run `node server.js` instead — that is the real entry point. `Source: package.json:L5`                   |
 
