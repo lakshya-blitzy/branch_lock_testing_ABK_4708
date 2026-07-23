@@ -12,13 +12,73 @@ const HEADERS_TIMEOUT_MS = 20000;           // Root Cause 4/5: header-receipt ti
 const KEEP_ALIVE_TIMEOUT_MS = 5000;         // Root Cause 4: idle keep-alive timeout
 const SOCKET_TIMEOUT_MS = 30000;            // Root Cause 4: idle socket timeout (default 0 = off)
 const SHUTDOWN_GRACE_MS = 10000;            // Root Cause 2: max drain time before force-close
+// Finding 2 (RC4): how often Node scans live connections to enforce headersTimeout /
+// requestTimeout. The Node default (30000ms) means a configured 20s headersTimeout or
+// 30s requestTimeout is not acted on until the next 30s scan tick, so a stalled client
+// can linger ~30-50s instead of near its configured deadline. Scanning every 1s makes
+// those deadlines effective within ~1s of expiry.
+const CONNECTIONS_CHECK_INTERVAL_MS = 1000;
 
 // Root Cause 4: track live sockets so shutdown can drain / force-close them
 const sockets = new Set();
 
-const server = http.createServer((req, res) => {
+// Findings 3/5 (RC5): per-socket state shared between the request handler and the
+// 'clientError' handler. Keyed by the raw socket (WeakMap => auto-released on GC):
+//   inflight       count of responses currently being produced on this socket
+//   closeWhenIdle  a clientError asked to close, but a valid response is still in flight
+//   clientErrored  a clientError was already logged/handled for this socket (dedupe)
+//   delivered      at least one valid response has been fully flushed on this socket
+//   closed         closeSocketOnce has already run for this socket (act at most once)
+const connState = new WeakMap();
+
+// Findings 3/5 (RC5): close a socket at most once after a client error. If a valid
+// response was already delivered on it (the pipelined "valid + malformed in one TCP
+// segment" case), send a bare FIN so that delivered response is not corrupted; if no
+// valid response was delivered (a lone malformed or timed-out request), first write a
+// bare 400 Bad Request — matching the pre-hardening clientError behavior — then close.
+function closeSocketOnce(socket, st) {
+  if (!socket || socket.destroyed) return;
+  if (st) {
+    if (st.closed) return;   // idempotent: never take a close action twice on one socket
+    st.closed = true;
+  }
+  if (st && st.delivered) {
+    socket.end();
+  } else if (socket.writable) {
+    socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n');
+  } else {
+    socket.destroy();
+  }
+}
+
+// Finding 2 (RC4): pass connectionsCheckingInterval so the timeouts configured below
+// (headersTimeout / requestTimeout) are enforced near their deadline instead of on the
+// 30s default scan tick.
+const server = http.createServer({ connectionsCheckingInterval: CONNECTIONS_CHECK_INTERVAL_MS }, (req, res) => {
   // Root Cause 5: never let a handler exception crash the process
   try {
+    // Findings 3/5 (RC5): mark a response as in-flight on this socket so a later
+    // 'clientError' (e.g. a malformed pipelined request arriving in the same TCP
+    // segment as this valid one) defers closing until this valid response has been
+    // flushed, instead of erasing it by writing a raw 400 over the socket.
+    const sock = req.socket;
+    const st = connState.get(sock);
+    if (st) {
+      st.inflight += 1;
+      // A fully-flushed response means a valid reply was delivered on this socket.
+      res.on('finish', () => { st.delivered = true; });
+      // 'close' is the terminal signal for the response — it fires on a normal finish
+      // AND on a premature abort (e.g. requestTimeout mid-body or a client disconnect).
+      // Releasing the slot here (not on 'finish') guarantees the socket cannot linger
+      // if the in-flight request is aborted before it completes.
+      res.on('close', () => {
+        st.inflight -= 1;
+        if (st.closeWhenIdle && st.inflight <= 0) {
+          closeSocketOnce(sock, st);
+        }
+      });
+    }
+
     // Root Cause 5: handle per-request stream errors / client aborts
     req.on('error', (err) => {
       console.error(`Request stream error: ${err.message}`);
@@ -59,8 +119,13 @@ const server = http.createServer((req, res) => {
     let received = 0;
     req.on('data', (chunk) => {
       received += chunk.length;
-      if (received > MAX_BODY_BYTES) {
+      if (received > MAX_BODY_BYTES && !res.headersSent) {
         res.statusCode = 413; res.setHeader('Content-Type', 'text/plain');
+        // Finding 4 (RC4/RC5): the oversized body is not fully consumed on this early
+        // response, so advertise Connection: close (mirrors the declared-Content-Length
+        // 413 path). Without it the streamed 413 head would still claim keep-alive while
+        // the socket is being torn down, producing contradictory framing for the client.
+        res.setHeader('Connection', 'close');
         res.end('Payload Too Large\n'); req.destroy();
       }
     });
@@ -90,17 +155,36 @@ server.setTimeout(SOCKET_TIMEOUT_MS);
 // Root Cause 4: maintain the live-socket registry used by graceful shutdown
 server.on('connection', (socket) => {
   sockets.add(socket);
+  // Findings 3/5 (RC5): initialise per-socket state used to coordinate the request
+  // handler and the 'clientError' handler (see the connState declaration above).
+  connState.set(socket, { inflight: 0, closeWhenIdle: false, clientErrored: false, delivered: false, closed: false });
   socket.on('close', () => sockets.delete(socket));
 });
 
 // Root Cause 5: handle malformed requests without crashing (send 400, close socket)
 server.on('clientError', (err, socket) => {
-  console.error(`Client error: ${err.message}`);
-  if (socket.writable && !socket.destroyed) {
-    socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n');
-  } else {
-    socket.destroy();
+  const st = connState.get(socket);
+  // A timeout error (ERR_HTTP_REQUEST_TIMEOUT covers both headersTimeout and
+  // requestTimeout) is about the current, incomplete request itself — it will never
+  // complete, so the socket must be closed now and this must override any prior defer.
+  const isTimeout = err && err.code === 'ERR_HTTP_REQUEST_TIMEOUT';
+  // Finding 5 (RC5): Node can emit 'clientError' more than once for one socket (e.g. a
+  // 'Request timeout' immediately followed by a 'Parse Error' on the partial buffer).
+  // Log at most once per socket so a single failure yields a single diagnostic line.
+  if (!st || !st.clientErrored) {
+    console.error(`Client error: ${err.message}`);
+    if (st) st.clientErrored = true;
   }
+  // Finding 3 (RC5): only a parse-level error can represent a *separate* malformed
+  // request pipelined behind a valid one in the same TCP segment. When such an error
+  // arrives while a valid response is still in flight, do NOT write a raw 400 now — that
+  // would clobber the in-flight response. Defer; the response's 'close' handler ends the
+  // socket once it is idle. Timeout errors are never deferred (see isTimeout above).
+  if (!isTimeout && st && st.inflight > 0 && !st.closeWhenIdle) {
+    st.closeWhenIdle = true;
+    return;
+  }
+  closeSocketOnce(socket, st);
 });
 
 // Root Cause 1: subscribe to 'error' so bind failures (EADDRINUSE/EACCES) log and exit cleanly
