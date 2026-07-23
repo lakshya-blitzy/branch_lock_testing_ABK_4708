@@ -41,6 +41,7 @@ const port = 3000;
  * request never reaches this callback because no `'connect'` listener is
  * registered, so the client receives an empty reply.
  *
+ * @callback requestHandler
  * @param {http.IncomingMessage} req - The incoming HTTP request (unused/ignored).
  * @param {http.ServerResponse} res - The outgoing HTTP response.
  * @returns {void}
@@ -57,6 +58,7 @@ const server = http.createServer((req, res) => {
  * `console.log`. Note: no `'error'` listener is registered on the server, so a
  * bind failure such as `EADDRINUSE` (port already in use) is fatal.
  *
+ * @callback listenCallback
  * @returns {void}
  */
 server.listen(port, hostname, () => {

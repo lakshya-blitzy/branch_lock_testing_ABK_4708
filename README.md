@@ -8,7 +8,7 @@ method, on any path — with the identical plain-text greeting `Hello, World!`.
 There is no routing, no framework, and no third-party code. Two methods receive
 protocol-level handling from Node rather than from the handler (`HEAD` and
 `CONNECT`); see [API Documentation](#api-documentation).
-(Source: server.js; package.json)
+(Source: server.js:L17-L66; package.json:L1-L11)
 
 > **How to read the citations in this document.** Facts about the repository
 > cite an exact locator, e.g. `Source: server.js:L49` or `Source: package.json:L4`
@@ -42,12 +42,12 @@ protocol-level handling from Node rather than from the handler (`HEAD` and
 return `Hello, World!` to any client that connects. It uses nothing beyond the
 Node.js standard library: the sole `require` is the built-in `http` module
 (Source: server.js:L17). The project declares **zero** `dependencies` and
-**zero** `devDependencies`, and has no build step (Source: package.json).
+**zero** `devDependencies`, and has no build step (Source: package.json:L1-L11).
 
 Because the request handler never inspects the incoming request, it returns the
 same `HTTP 200` `text/plain` response to every **ordinary** request it
 receives — regardless of method (`GET`, `POST`, `PUT`, `DELETE`, `PATCH`, …) or
-path (Source: server.js:L48-L52). Two methods are handled specially by Node's
+path (Source: server.js:L49-L53). Two methods are handled specially by Node's
 transport layer rather than by the handler — `HEAD` (response body suppressed)
 and `CONNECT` (handler bypassed); both are documented under
 [API Documentation](#api-documentation).
@@ -66,18 +66,20 @@ model: network I/O is serviced asynchronously by the event loop rather than by
 one thread per connection (see the
 [Node.js `http` documentation](https://nodejs.org/api/http.html)). A single
 call to `http.createServer(...)` registers exactly one request handler
-(Source: server.js:L48-L52), and `server.listen(...)` binds a listening socket
+(Source: server.js:L49-L53), and `server.listen(...)` binds a listening socket
 on the loopback interface and begins accepting connections
-(Source: server.js:L62-L64).
+(Source: server.js:L64-L66).
 
 Each **ordinary** inbound HTTP request is delivered to that handler through
 Node's `request` event; because the handler does not branch on method, path,
 headers, or body, there is exactly **one** application response path
-(Source: server.js:L48-L52). A single keep-alive TCP connection may carry
+(Source: server.js:L49-L53). A single keep-alive TCP connection may carry
 multiple such requests. The `HEAD` and `CONNECT` methods are handled by Node's
 transport layer as described under [API Documentation](#api-documentation). At
 startup the `listen` callback prints a single readiness line to `stdout`
-(Source: server.js:L62-L64); no other logging occurs.
+(Source: server.js:L64-L66); no other logging occurs.
+
+<!-- markdownlint-disable MD013 -->
 
 ```mermaid
 flowchart LR
@@ -90,10 +92,12 @@ flowchart LR
   Listen --> Log["stdout: Server running at<br/>http://127.0.0.1:3000/"]
 ```
 
+<!-- markdownlint-enable MD013 -->
+
 ## Prerequisites
 
 - **Node.js** — the project does **not** pin a version: `package.json` contains
-  no `engines` field (Source: package.json). Use a currently supported
+  no `engines` field (Source: package.json:L1-L11). Use a currently supported
   [Node.js LTS release](https://nodejs.org/en/about/previous-releases). This
   documentation's runnable examples were produced on **Node.js v22.23.1**, the
   environment observed by the AAP on **July 20, 2026**; that specific version
@@ -117,7 +121,7 @@ cd "$(basename "$REPO_URL" .git)"
 
 Installing dependencies is effectively a **no-op** — `package.json` declares no
 `dependencies` or `devDependencies`, so there is nothing to download
-(Source: package.json). You may still run it for completeness:
+(Source: package.json:L1-L11). You may still run it for completeness:
 
 ```bash
 npm install
@@ -134,7 +138,7 @@ node server.js
 ```
 
 On success it prints exactly the following line to `stdout` and then keeps
-running in the foreground (Source: server.js:L62-L64):
+running in the foreground (Source: server.js:L64-L66):
 
 ```text
 Server running at http://127.0.0.1:3000/
@@ -161,35 +165,43 @@ Stop the server with `Ctrl+C`.
 The server exposes a single, implicit **catch-all** endpoint at
 `http://127.0.0.1:3000`. Because the handler never inspects the request, every
 **ordinary** request receives the same response regardless of method or path
-(Source: server.js:L48-L52). The `HEAD` and `CONNECT` methods are subject to
+(Source: server.js:L49-L53). The `HEAD` and `CONNECT` methods are subject to
 protocol-level handling by Node and are covered in
 [Protocol notes](#protocol-notes) below.
+
+<!-- markdownlint-disable MD013 -->
 
 | Method | Path | Status | Content-Type | Body |
 | --- | --- | --- | --- | --- |
 | Any ordinary method (`GET`, `POST`, `PUT`, `DELETE`, `PATCH`, …) | Any (`/`, `/anything`, `/a/b/c?q=1`, …) | `200 OK` | `text/plain` | `Hello, World!\n` |
 
+<!-- markdownlint-enable MD013 -->
+
 The stable, application-defined contract is: status `200`
-(Source: server.js:L49), `Content-Type: text/plain` (Source: server.js:L50),
-and body `Hello, World!\n` (Source: server.js:L51). `HEAD` and `CONNECT` differ
+(Source: server.js:L50), `Content-Type: text/plain` (Source: server.js:L51),
+and body `Hello, World!\n` (Source: server.js:L52). `HEAD` and `CONNECT` differ
 as described in [Protocol notes](#protocol-notes).
 
 ### Response headers
 
-Only `Content-Type` is set by the application (Source: server.js:L50). The
+Only `Content-Type` is set by the application (Source: server.js:L51). The
 remaining headers are generated automatically by Node's `http` layer; their
 presence and exact values depend on the Node.js version, the request method,
 and connection state. The values in the table below are **illustrative runtime
 observations** (Node.js v22.23.1, July 20, 2026), not part of the guaranteed
 contract.
 
+<!-- markdownlint-disable MD013 -->
+
 | Header | Example value | Origin |
 | --- | --- | --- |
-| `Content-Type` | `text/plain` | Set by the application (Source: server.js:L50) |
+| `Content-Type` | `text/plain` | Set by the application (Source: server.js:L51) |
 | `Content-Length` | `14` | Generated by Node for responses that carry a body (the body is 14 bytes); **omitted for `HEAD`** — runtime observation |
-| `Date` | `Wed, 22 Jul 2026 10:08:19 GMT` | Generated by Node; value varies per request — runtime observation |
+| `Date` | `Mon, 20 Jul 2026 10:08:19 GMT` | Generated by Node; value varies per request — runtime observation |
 | `Connection` | `keep-alive` | Generated by Node; depends on connection handling — runtime observation |
 | `Keep-Alive` | `timeout=5` | Generated by Node; depends on connection handling — runtime observation |
+
+<!-- markdownlint-enable MD013 -->
 
 ### Example: `GET /`
 
@@ -198,7 +210,7 @@ curl -i http://127.0.0.1:3000/
 ```
 
 Expected response. The status line, `Content-Type`, and body are the stable,
-application-defined contract (Source: server.js:L49-L51); the `Date`,
+application-defined contract (Source: server.js:L50-L52); the `Date`,
 `Connection`, `Keep-Alive`, and `Content-Length` lines are Node-generated and
 are **illustrative and environment-dependent** (observed on Node.js v22.23.1,
 July 20, 2026):
@@ -206,7 +218,7 @@ July 20, 2026):
 ```text
 HTTP/1.1 200 OK
 Content-Type: text/plain
-Date: Wed, 22 Jul 2026 10:08:19 GMT
+Date: Mon, 20 Jul 2026 10:08:19 GMT
 Connection: keep-alive
 Keep-Alive: timeout=5
 Content-Length: 14
@@ -217,7 +229,7 @@ Hello, World!
 ### Example: any other method / path
 
 The catch-all behavior means a `POST` to an arbitrary path returns the very
-same application response (Source: server.js:L48-L52). The Node-generated
+same application response (Source: server.js:L49-L53). The Node-generated
 headers below are illustrative and environment-dependent, as above:
 
 ```bash
@@ -227,7 +239,7 @@ curl -i -X POST http://127.0.0.1:3000/anything
 ```text
 HTTP/1.1 200 OK
 Content-Type: text/plain
-Date: Wed, 22 Jul 2026 10:08:19 GMT
+Date: Mon, 20 Jul 2026 10:08:19 GMT
 Connection: keep-alive
 Keep-Alive: timeout=5
 Content-Length: 14
@@ -248,7 +260,7 @@ curl -i -I http://127.0.0.1:3000/
 ```text
 HTTP/1.1 200 OK
 Content-Type: text/plain
-Date: Wed, 22 Jul 2026 10:08:19 GMT
+Date: Mon, 20 Jul 2026 10:08:19 GMT
 Connection: keep-alive
 Keep-Alive: timeout=5
 
@@ -260,11 +272,11 @@ Keep-Alive: timeout=5
   `Content-Type` header, but **suppresses the response body** and **omits the
   body-framing `Content-Length` header**, per the HTTP specification. This is
   Node's transport-layer behavior, not application logic; the handler itself is
-  unchanged (Source: server.js:L48-L52). Behavior confirmed as a runtime
+  unchanged (Source: server.js:L49-L53). Behavior confirmed as a runtime
   observation (Node.js v22.23.1, July 20, 2026); see the
   [Node.js `http` documentation](https://nodejs.org/api/http.html).
 - **`CONNECT`** — is never delivered to this handler because no `'connect'`
-  listener is registered on the server (Source: server.js:L48-L52); the client
+  listener is registered on the server (Source: server.js:L17-L66); the client
   receives an empty (zero-byte) reply (runtime observation, Node.js v22.23.1,
   July 20, 2026).
 
@@ -274,10 +286,14 @@ There are no environment variables and no command-line flags. The two settings
 below are **hard-coded compile-time constants**; changing either one requires
 editing `server.js` directly and restarting the process.
 
+<!-- markdownlint-disable MD013 -->
+
 | Setting | Value | Meaning | Source |
 | --- | --- | --- | --- |
 | `hostname` | `127.0.0.1` | Network interface the server binds to (loopback only) | Source: server.js:L23 |
 | `port` | `3000` | TCP port the server listens on | Source: server.js:L28 |
+
+<!-- markdownlint-enable MD013 -->
 
 ## Inline Code Explanation
 
@@ -296,15 +312,16 @@ editing `server.js` directly and restarting the process.
    (Source: server.js:L28).
 4. **Create the server and define the request handler** —
    `http.createServer((req, res) => { … })` registers the one handler for every
-   ordinary request. It sets the status code to `200` (Source: server.js:L49),
-   sets the `Content-Type: text/plain` header (Source: server.js:L50), and ends
-   the response with the body `Hello, World!\n` (Source: server.js:L51). The
+   ordinary request. It sets the status code to `200` (Source: server.js:L50),
+   sets the `Content-Type: text/plain` header (Source: server.js:L51), and ends
+   the response with the body `Hello, World!\n` (Source: server.js:L52). The
    `req` argument is never read, which is why the server is a catch-all for
-   ordinary requests (Source: server.js:L48-L52).
+   ordinary requests (Source: server.js:L49-L53).
 5. **Start listening** — `server.listen(port, hostname, () => { … })` binds the
    socket and begins accepting connections; its callback logs
-   `Server running at http://127.0.0.1:3000/`. No `'error'` listener is
-   registered on the server (Source: server.js:L62-L64).
+   `Server running at http://127.0.0.1:3000/` (Source: server.js:L64-L66).
+   No `'error'` listener is registered anywhere in the module, so a bind
+   failure is unhandled (Source: server.js:L17-L66).
 
 ## Deployment Guide
 
@@ -420,18 +437,20 @@ server {
 ```
 
 Encryption is provided by terminating TLS at the proxy — **not** by this
-application, which has no TLS of its own (Source: server.js). Provisioning the
-certificate and configuring access controls are your responsibility.
+application, which has no TLS of its own (Source: server.js:L17-L66).
+Provisioning the certificate and configuring access controls are your
+responsibility.
 
 **Deployment limitations.** The application itself provides no clustering /
 multi-process scaling, no graceful shutdown, and no HTTPS/TLS
-(Source: server.js). Those concerns must be handled externally (for example, a
-process manager for restarts and an nginx reverse proxy for TLS).
+(Source: server.js:L17-L66). Those concerns must be handled externally
+(for example, a process manager for restarts and an nginx reverse proxy for
+TLS).
 
 ## Troubleshooting
 
 **`EADDRINUSE` — port already in use.** Because no `'error'` listener is
-registered on the server (Source: server.js:L62-L64), a bind failure is fatal:
+registered on the server (Source: server.js:L17-L66), a bind failure is fatal:
 Node emits an unhandled `'error'` event and the process exits with code `1`. A
 representative runtime observation (Node.js v22.23.1, July 20, 2026) is:
 
@@ -456,8 +475,8 @@ This project consists of just three files:
 
 ```text
 .
-├── server.js      # The HTTP server — the runtime entry point (Source: server.js)
-├── package.json   # Project metadata: name, version, license (Source: package.json)
+├── server.js      # Runtime entry point (Source: server.js:L17-L66)
+├── package.json   # Project metadata (Source: package.json:L2-L10)
 └── README.md      # This documentation
 ```
 
@@ -469,15 +488,17 @@ files listed above.
 
 The server is intentionally minimal. It does **not** provide:
 
-- **Routing** — every path is handled identically (Source: server.js:L48-L52).
+- **Routing** — every path is handled identically (Source: server.js:L49-L53).
 - **Request parsing / body handling** — `req` is never read
-  (Source: server.js:L48-L52).
-- **Persistence** — no database or file storage.
-- **Authentication / authorization** — all requests are treated the same.
-- **TLS / HTTPS** — plain HTTP only.
+  (Source: server.js:L49-L53).
+- **Persistence** — no database or file storage (Source: server.js:L17-L66).
+- **Authentication / authorization** — all requests are treated the same
+  (Source: server.js:L49-L53).
+- **TLS / HTTPS** — plain HTTP only (Source: server.js:L17-L66).
 - **Logging** — nothing beyond the single startup line
-  (Source: server.js:L62-L64).
-- **Graceful shutdown or clustering.**
+  (Source: server.js:L17-L66).
+- **Graceful shutdown or clustering** — not implemented
+  (Source: server.js:L17-L66).
 
 These are intentional design choices for a minimal example, not defects. Any
 public or production deployment must supply these controls externally (see the
