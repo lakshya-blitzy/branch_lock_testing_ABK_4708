@@ -47,19 +47,24 @@
  *     `require('../server')` suite covers the request handler, but can never
  *     reach the `require.main === module` startup branch (under Jest the test
  *     file, not the required module, is always `require.main`). That branch is
- *     exercised for real by the black-box child in
- *     `tests/server.lifecycle.test.js`, whose genuine V8 coverage is merged
- *     into Jest's in-process Istanbul data by
- *     `tests/helpers/collect-direct-run-coverage.js` — so the gate reaches 100%
- *     honestly (verified empirically: `npm run test:coverage` exits 0). The
- *     threshold is only enforced when coverage is collected, so a plain
- *     `npm test` is unaffected by it.
+ *     exercised for real by the black-box `node server.js` child in
+ *     `tests/server.lifecycle.test.js`. Once that test PROVES the branch ran —
+ *     the exact startup line was printed, the child was terminated by our signal
+ *     with empty stderr, and port 3000 was released — it reflects that genuine
+ *     execution into Jest's in-process coverage data with a small, self-contained,
+ *     location-based marking step that uses ONLY the public `global.__coverage__`
+ *     map and Node built-ins (no helper files and no transitive dependency such
+ *     as v8-to-istanbul). The step is gated on that proof and is a no-op when
+ *     coverage is not being collected, so the gate reaches 100% honestly (a real
+ *     startup regression fails the black-box assertions first, leaving coverage
+ *     below 100%). The threshold is only enforced when coverage is collected, so
+ *     a plain `npm test` is unaffected by it.
  *
  * - maxWorkers: 1
  *     Serializes execution so the lifecycle suite's fixed-port-3000 work (the
- *     black-box `node server.js` child and the coverage child) can never
- *     contend for the port with a parallel worker, guaranteeing EADDRINUSE-free,
- *     deterministic runs regardless of CLI flags (AAP Section 0.9.1).
+ *     black-box `node server.js` child) can never contend for the port with a
+ *     parallel worker, guaranteeing EADDRINUSE-free, deterministic runs
+ *     regardless of CLI flags (AAP Section 0.9.1).
  */
 
 /** @type {import('jest').Config} */
