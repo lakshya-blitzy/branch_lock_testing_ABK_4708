@@ -1,1 +1,33 @@
+# ---------------------------------------------------------------------------
+# Dependency install output
+# ---------------------------------------------------------------------------
+# The resolved package tree is reproducible from package.json/package-lock.json
+# and must never be committed.
 node_modules/
+
+# ---------------------------------------------------------------------------
+# TLS private key and certificate material
+# ---------------------------------------------------------------------------
+# HTTPS support references key/certificate files by filesystem path only, via
+# the TLS_KEY_PATH and TLS_CERT_PATH environment variables - never inline in
+# code or configuration. These patterns make accidental introduction of private
+# key material into version control impossible rather than merely discouraged.
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# ---------------------------------------------------------------------------
+# Environment files
+# ---------------------------------------------------------------------------
+# A populated .env carries deployment-specific security configuration: the CORS
+# origin allow-list, the rate-limit budget, the body-size ceiling and the TLS
+# key/certificate paths. None of it belongs in the repository.
+.env
+.env.*
+# Exception: the secret-free template that documents the configuration surface
+# stays tracked. Git applies the LAST matching pattern, so this negation must
+# remain below the ".env.*" pattern above - reordering it would silently
+# untrack .env.example.
+!.env.example
